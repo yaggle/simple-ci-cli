@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<pipeline image="maven:3.3.9-jdk-8"
+          xmlns="https://yaggle.co/SIMPLECI/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="https://yaggle.co/SIMPLECI/1.0.0 https://yaggle.co/xsd/simple-ci-1.0.0.xsd">
+	<task id="build" name="Build">
+		mvn verify -Dmaven.test.skip=true
+	</task>
+	<task id="test" dependsOn="build" name="Test">
+		mvn surefire:test
+	</task>
+	<task id="deployNonProd" dependsOn="test" branch="^!(master|develop)$" name="Deploy (non-prod)">
+		mvn artifactory:publish
+	</task>
+</pipeline>
