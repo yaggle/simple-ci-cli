@@ -3,3 +3,4 @@ Thumbs.db
 /.idea/
 /*.iml
 /target/
+/dependency-reduced-pom.xml
