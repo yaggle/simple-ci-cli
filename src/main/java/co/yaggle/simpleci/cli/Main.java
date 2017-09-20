@@ -1,6 +1,5 @@
 package co.yaggle.simpleci.cli;
 
-import co.yaggle.simpleci.core.ContainerClient;
 import co.yaggle.simpleci.core.pipeline.Pipeline;
 import co.yaggle.simpleci.core.pipeline.PipelineLoader;
 import co.yaggle.simpleci.core.pipeline.PipelineRunner;
@@ -8,7 +7,9 @@ import co.yaggle.simpleci.core.pipeline.event.ContainerStartedEvent;
 import co.yaggle.simpleci.core.pipeline.event.ContainerStoppedEvent;
 import co.yaggle.simpleci.core.pipeline.event.ImageLoadFailedEvent;
 import co.yaggle.simpleci.core.pipeline.event.ImageLoadedEvent;
+import co.yaggle.simpleci.core.pipeline.event.PipelineCompletedEvent;
 import co.yaggle.simpleci.core.pipeline.event.PipelineEvent;
+import co.yaggle.simpleci.core.pipeline.event.PipelineStartedEvent;
 import co.yaggle.simpleci.core.pipeline.event.TaskCommandAbortedEvent;
 import co.yaggle.simpleci.core.pipeline.event.TaskCommandCompletedEvent;
 import co.yaggle.simpleci.core.pipeline.event.TaskCommandOutputEvent;
@@ -33,19 +34,33 @@ public class Main {
 
         File currentDirectory = new File(System.getProperty("user.dir"));
 
+        System.out.println("Current directory: " + currentDirectory.getCanonicalPath());
+
         // Load the pipeline config from the current directory
         Pipeline pipeline = PipelineLoader.loadPipeline(currentDirectory);
 
         // Create an event queue to listen to events.
         BlockingQueue<PipelineEvent> eventQueue = new LinkedBlockingQueue<>();
 
-        // Run the pipeline.
-        new PipelineRunner(new ContainerClient()).launchPipeline(pipeline, currentDirectory, eventQueue);
+        // Run the pipeline
+        PipelineRunner
+            .builder()
+            .pipeline(pipeline)
+            .mountFromDirectory(currentDirectory)
+            .eventQueue(eventQueue)
+            .build()
+            .run(pipeline);
 
 
         PipelineEvent pipelineEvent = eventQueue.take();
-        while (!(pipelineEvent instanceof ContainerStoppedEvent) && !(pipelineEvent instanceof ImageLoadFailedEvent) && !(pipelineEvent instanceof TaskCommandAbortedEvent)) {
-            if (pipelineEvent instanceof ImageLoadedEvent) {
+        while (
+            !(pipelineEvent instanceof PipelineCompletedEvent) &&
+            !(pipelineEvent instanceof ImageLoadFailedEvent) &&
+            !(pipelineEvent instanceof TaskCommandAbortedEvent)
+        ) {
+            if (pipelineEvent instanceof PipelineStartedEvent) {
+                onPipelineStarted((PipelineStartedEvent) pipelineEvent);
+            } else if (pipelineEvent instanceof ImageLoadedEvent) {
                 onImageLoaded((ImageLoadedEvent) pipelineEvent);
             } else if (pipelineEvent instanceof ContainerStartedEvent) {
                 onContainerStarted((ContainerStartedEvent) pipelineEvent);
@@ -59,13 +74,15 @@ public class Main {
                 onTaskCommandCompleted((TaskCommandCompletedEvent) pipelineEvent);
             } else if (pipelineEvent instanceof TaskCompletedEvent) {
                 onTaskCompleted((TaskCompletedEvent) pipelineEvent);
+            } else if (pipelineEvent instanceof ContainerStoppedEvent) {
+                onContainerStopped((ContainerStoppedEvent) pipelineEvent);
             }
 
             pipelineEvent = eventQueue.take();
         }
 
-        if (pipelineEvent instanceof ContainerStoppedEvent) {
-            System.out.println("CONTAINER STOPPED!");
+        if (pipelineEvent instanceof PipelineCompletedEvent) {
+            System.out.println("PIPELINE COMPLETED!");
         } else if (pipelineEvent instanceof ImageLoadFailedEvent) {
             System.out.println("IMAGE LOAD FAILED!");
         } else if (pipelineEvent instanceof TaskCommandAbortedEvent) {
@@ -73,6 +90,9 @@ public class Main {
         }
     }
 
+    private static void onPipelineStarted(PipelineStartedEvent e) {
+        System.out.println("PIPELINE STARTED!");
+    }
 
     private static void onImageLoaded(ImageLoadedEvent e) {
         System.out.println("IMAGE LOADED!\n");
@@ -90,7 +110,7 @@ public class Main {
 
 
     private static void onTaskCommandStarted(TaskCommandStartedEvent e) {
-        System.out.println("> " + e.getCommand() + "\n");
+        System.out.println("TASK COMMAND STARTED: " + e.getTaskId() + " (" + e.getCommandIndex() + "): " + e.getCommand() + "\n");
     }
 
 
@@ -104,6 +124,9 @@ public class Main {
         System.out.println("TASK COMMAND COMPLETED: " + e.getTaskId() + " (" + e.getCommandIndex() + ")\n");
     }
 
+    private static void onContainerStopped(ContainerStoppedEvent e) {
+        System.out.println("CONTAINER STOPPED!");
+    }
 
     private static void onTaskCompleted(TaskCompletedEvent e) {
         System.out.println("TASK COMPLETED: " + e.getTaskId() + "\n");

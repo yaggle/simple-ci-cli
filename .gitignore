@@ -2,5 +2,8 @@
 Thumbs.db
 /.idea/
 /*.iml
+/.settings/
+/.project
+/.classpath
 /target/
 /dependency-reduced-pom.xml
